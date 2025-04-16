@@ -3,7 +3,7 @@ module.exports = {
     {
       name: "Archive.Org-Downloader-Web",
       script: "bash",
-      args: "./start"
+      args: "./start-web"
     }
   ]
 }

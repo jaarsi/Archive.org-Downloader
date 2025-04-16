@@ -4,6 +4,7 @@ import json
 import os
 import re
 import shutil
+import sys
 import time
 from concurrent import futures
 from datetime import datetime
@@ -405,4 +406,6 @@ def cli(
 
 
 if __name__ == "__main__":
-    cli()
+    if len(sys.argv) == 1:
+        sys.argv.append("--help")
+    cli(show_default=True)
