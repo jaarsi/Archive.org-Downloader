@@ -1,0 +1,28 @@
+[project]
+name = "archive-org-downloader"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "click>=8.1.8",
+    "img2pdf>=0.6.0",
+    "pycryptodome>=3.22.0",
+    "requests>=2.32.3",
+    "streamlit>=1.44.1",
+    "tqdm>=4.67.1",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "python-dotenv>=1.1.0",
+    "ruff>=0.11.5",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "I"]
+fixable = ["I"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+force-single-line = true

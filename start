@@ -1,0 +1,5 @@
+#!/bin/bash
+
+set -e
+
+uv run dotenv run -- streamlit run index.py

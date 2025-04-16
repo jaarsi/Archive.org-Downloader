@@ -1,0 +1,6 @@
+#!/bin/bash
+
+set -e
+
+uv run ruff format -q *.py
+uv run ruff check -q --fix *.py
