@@ -1,0 +1,6 @@
+#!/bin/bash
+
+set -e
+
+rm -f requirements.txt
+uv pip compile --no-header --no-annotate -qo requirements.txt pyproject.toml

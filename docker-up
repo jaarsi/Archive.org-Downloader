@@ -1,0 +1,9 @@
+#!/bin/bash
+
+set -e
+
+./lint
+./compile-reqs
+
+docker compose down --remove-orphans
+docker compose up --build $@
