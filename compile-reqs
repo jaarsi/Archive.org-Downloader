@@ -1,0 +1,3 @@
+#!/bin/bash
+set -e
+uv pip compile -qo requirements.txt pyproject.toml

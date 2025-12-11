@@ -1,3 +1,4 @@
+# type: ignore
 import requests
 import random, string
 from concurrent import futures
@@ -28,7 +29,7 @@ def get_book_infos(session, url):
 	data = response.json()['data']
 	title = data['brOptions']['bookTitle'].strip().replace(" ", "_")
 	title = ''.join( c for c in title if c not in '<>:"/\\|?*' ) # Filter forbidden chars in directory names (Windows & Linux)
-	title = title[:150] # Trim the title to avoid long file names	
+	title = title[:150] # Trim the title to avoid long file names
 	metadata = data['metadata']
 	links = []
 	for item in data['brOptions']['data']:
@@ -53,13 +54,13 @@ def login(email, password):
 
 	headers = {"Content-Type": "application/x-www-form-urlencoded"}
 	data = {"username":email, "password":password, "t": login_token}
-	
+
 	response = session.post("https://archive.org/services/account/login/", headers=headers, data=json.dumps(data))
 	try:
 		response_json = response.json()
 	except:
 		display_error(response, "[-] Error while login:")
-	
+
 	if response_json["success"] == False:
 		if response_json["value"] == "bad_login":
 			print("[-] Invalid credentials!")
@@ -150,7 +151,7 @@ def deobfuscate_image(image_data, link, obf_header):
 
 	decrypted_part = cipher.decrypt(image_data[:1024])
 	new_data = decrypted_part + image_data[1024:]
-	return new_data	
+	return new_data
 
 def download_one_image(session, link, i, directory, book_id, pages):
 	headers = {
@@ -185,7 +186,7 @@ def download_one_image(session, link, i, directory, book_id, pages):
 			return
 	else:
 		image_content = response.content
-	
+
 	with open(image, "wb") as f:
 		f.write(image_content)
 
@@ -201,7 +202,7 @@ def download(session, n_threads, directory, links, scale, book_id):
 			tasks.append(executor.submit(download_one_image, session=session, link=link, i=i, directory=directory, book_id=book_id, pages=pages))
 		for task in tqdm(futures.as_completed(tasks), total=len(tasks)):
 			pass
-	
+
 	images = [image_name(pages, i, directory) for i in range(len(links))]
 	return images
 
@@ -284,7 +285,7 @@ if __name__ == "__main__":
 			directory = f"{_directory}({i})"
 			i += 1
 		os.makedirs(directory)
-		
+
 		if args.meta:
 			print("Writing metadata.json...")
 			with open(f"{directory}/metadata.json",'w') as f:

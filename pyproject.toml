@@ -1,0 +1,24 @@
+[project]
+name = "archive-org-downloader"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "img2pdf>=0.6.3",
+    "pycryptodome>=3.23.0",
+    "requests>=2.32.5",
+    "streamlit>=1.52.1",
+    "tqdm>=4.67.1",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+exclude = [ "main.py" ]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14.8",
+]
