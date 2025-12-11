@@ -5,7 +5,7 @@ import zipfile
 import streamlit as st
 import subprocess
 
-
+__VERSION__ = "v2025.12.11.1510"
 AO_EMAIL = os.getenv("AO_EMAIL", "")
 AO_PASSWORD = os.getenv("AO_PASSWORD", "")
 
@@ -42,7 +42,8 @@ def show_message(message: str):
 
 
 def main():
-    st.title("Baixador de Livros do Archive.org")
+    st.badge(__VERSION__, color="orange")
+    st.title(f"Baixador de Livros do Archive.org")
     books_urls = st.text_area(
         "URL dos Livros", height=200, disabled=st.session_state.running
     ).splitlines()
