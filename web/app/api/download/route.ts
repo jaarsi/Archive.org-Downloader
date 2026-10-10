@@ -16,7 +16,7 @@ const gate = createGate(MAX_CONCURRENT);
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
-  const url = body?.url;
+  const urls = Array.isArray(body?.urls) ? body.urls : [];
   const email = body?.email;
   const password = body?.password;
   const resolution = Number(body?.resolution ?? 3);
@@ -24,8 +24,10 @@ export async function POST(req: NextRequest) {
   const meta = Boolean(body?.meta);
   const printDisabled = Boolean(body?.printDisabled);
 
-  if (typeof url !== "string" || !url.startsWith("https://archive.org/details/"))
-    return new Response("Invalid book URL", { status: 400 });
+  if (urls.length === 0)
+    return new Response("Provide at least one book URL", { status: 400 });
+  if (!urls.every((u: unknown) => typeof u === "string" && u.startsWith("https://archive.org/details/")))
+    return new Response("Every URL must start with https://archive.org/details/", { status: 400 });
   if (!email || !password)
     return new Response("Missing credentials", { status: 400 });
   if (!Number.isInteger(resolution) || resolution < 0 || resolution > 10)
@@ -40,7 +42,7 @@ export async function POST(req: NextRequest) {
   const id = newJobId();
   const out = jobDir(id);
   const python = process.env.PYTHON_BIN || "python3";
-  const argv = buildWorkerArgs({ url, resolution, format, meta, printDisabled, out, jobId: id });
+  const argv = buildWorkerArgs({ urls, resolution, format, meta, printDisabled, out, jobId: id });
 
   const child = spawn(python, argv, {
     cwd: process.cwd(),

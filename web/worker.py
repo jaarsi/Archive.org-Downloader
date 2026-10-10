@@ -1,4 +1,4 @@
-import sys, os, json, argparse, contextlib, importlib.util, zipfile
+import sys, os, json, argparse, contextlib, importlib.util, zipfile, shutil
 from concurrent import futures
 
 REAL_OUT = sys.stdout
@@ -51,6 +51,79 @@ def build_pdf_meta(metadata, book_id):
     return pdfmeta
 
 
+def process_book(aod, session, url, args, book_no, books_total, out_dir):
+    """Download + assemble one book into out_dir. Returns the output file path,
+    or None if the book was skipped (a book-error event was already emitted)."""
+    try:
+        book_id = parse_book_id(url)
+    except Exception:
+        emit(event="book-error", book=book_no, books=books_total, message="Invalid book URL")
+        return None
+
+    try:
+        with contextlib.redirect_stdout(sys.stderr):
+            session = aod.loan(session, book_id)
+            title, links, metadata = aod.get_book_infos(session, url, args.print_disabled)
+    except SystemExit:
+        emit(event="book-error", book=book_no, books=books_total,
+             message="Could not borrow or read this book.")
+        return None
+
+    if not links:
+        emit(event="book-error", book=book_no, books=books_total,
+             message="Book not available (it may be restricted to print-disabled patrons).")
+        return None
+
+    total = len(links)
+    title = title or book_id
+    emit(event="info", book=book_no, books=books_total, pages=total, title=title)
+
+    scaled = [f"{link}&rotate=0&scale={args.resolution}" for link in links]
+    done = 0
+    with contextlib.redirect_stdout(sys.stderr):
+        with futures.ThreadPoolExecutor(max_workers=50) as ex:
+            tasks = [
+                ex.submit(aod.download_one_image, session=session, link=link, i=i,
+                          directory=out_dir, book_id=book_id, pages=total)
+                for i, link in enumerate(scaled)
+            ]
+            for _ in futures.as_completed(tasks):
+                done += 1
+                emit(event="page", book=book_no, books=books_total, done=done, total=total)
+
+    emit(event="building", book=book_no, books=books_total)
+    images = [aod.image_name(total, i, out_dir) for i in range(total)]
+
+    if args.format == "pdf":
+        import img2pdf
+        with contextlib.redirect_stdout(sys.stderr):
+            pdf = img2pdf.convert(images, **build_pdf_meta(metadata, book_id))
+        out_file = os.path.join(out_dir, f"{title}.pdf")
+        with open(out_file, "wb") as f:
+            f.write(pdf)
+    else:
+        out_file = os.path.join(out_dir, f"{title}.zip")
+        with zipfile.ZipFile(out_file, "w", zipfile.ZIP_DEFLATED) as z:
+            for img in images:
+                z.write(img, os.path.basename(img))
+            if args.meta:
+                z.writestr("metadata.json", json.dumps(metadata))
+
+    for img in images:
+        try:
+            os.remove(img)
+        except OSError:
+            pass
+
+    with contextlib.redirect_stdout(sys.stderr):
+        try:
+            aod.return_loan(session, book_id)
+        except (SystemExit, Exception):
+            pass
+
+    return out_file
+
+
 def run(args):
     email = os.environ.get("ARCHIVE_EMAIL")
     password = os.environ.get("ARCHIVE_PASSWORD")
@@ -58,10 +131,9 @@ def run(args):
         emit(event="error", message="Missing credentials")
         sys.exit(1)
 
-    try:
-        book_id = parse_book_id(args.url)
-    except Exception:
-        emit(event="error", message="Invalid book URL")
+    urls = args.url or []
+    if not urls:
+        emit(event="error", message="No book URL provided")
         sys.exit(1)
 
     # test seam: exercise the outer error handler without network (see selftest)
@@ -70,70 +142,43 @@ def run(args):
 
     aod = load_script()
     os.makedirs(args.out, exist_ok=True)
+    work = os.path.join(args.out, "_work")
+    os.makedirs(work, exist_ok=True)
 
     emit(event="login")
     try:
         with contextlib.redirect_stdout(sys.stderr):
             session = aod.login(email, password)
-            session = aod.loan(session, book_id)
-            title, links, metadata = aod.get_book_infos(session, args.url, args.print_disabled)
     except SystemExit:
-        emit(event="error", message="Login/loan failed — check credentials and that the book is borrowable.")
-        sys.exit(1)
-    except Exception as e:
-        emit(event="error", message=f"{type(e).__name__}: {e}")
+        emit(event="error", message="Login failed — check your credentials.")
         sys.exit(1)
 
-    if not links:
-        emit(event="error", message="Book not available (it may be restricted to print-disabled patrons).")
+    total_books = len(urls)
+    outputs = []
+    for k, url in enumerate(urls, start=1):
+        book_dir = os.path.join(work, f"book{k}")
+        os.makedirs(book_dir, exist_ok=True)
+        out_file = process_book(aod, session, url, args, k, total_books, book_dir)
+        if out_file:
+            outputs.append(out_file)
+
+    if not outputs:
+        emit(event="error", message="No books could be downloaded.")
         sys.exit(1)
 
-    total = len(links)
-    title = title or book_id
-    emit(event="info", pages=total, title=title)
-
-    scaled = [f"{link}&rotate=0&scale={args.resolution}" for link in links]
-    done = 0
-    with contextlib.redirect_stdout(sys.stderr):
-        with futures.ThreadPoolExecutor(max_workers=50) as ex:
-            tasks = [
-                ex.submit(aod.download_one_image, session=session, link=link, i=i,
-                          directory=args.out, book_id=book_id, pages=total)
-                for i, link in enumerate(scaled)
-            ]
-            for _ in futures.as_completed(tasks):
-                done += 1
-                emit(event="page", done=done, total=total)
-
-    emit(event="building")
-    images = [aod.image_name(total, i, args.out) for i in range(total)]
-
-    if args.format == "pdf":
-        import img2pdf
-        with contextlib.redirect_stdout(sys.stderr):
-            pdf = img2pdf.convert(images, **build_pdf_meta(metadata, book_id))
-        out_name = f"{title}.pdf"
-        with open(os.path.join(args.out, out_name), "wb") as f:
-            f.write(pdf)
-        for img in images:
-            try:
-                os.remove(img)
-            except OSError:
-                pass
+    if len(outputs) == 1:
+        final = os.path.join(args.out, os.path.basename(outputs[0]))
+        shutil.move(outputs[0], final)
+        out_name = os.path.basename(final)
     else:
-        out_name = f"{title}.zip"
+        # ponytail: index-prefix each entry for stable order + no name clashes
+        out_name = "books.zip"
+        width = len(str(len(outputs)))
         with zipfile.ZipFile(os.path.join(args.out, out_name), "w", zipfile.ZIP_DEFLATED) as z:
-            for img in images:
-                z.write(img, os.path.basename(img))
-            if args.meta:
-                z.writestr("metadata.json", json.dumps(metadata))
+            for i, f in enumerate(outputs, start=1):
+                z.write(f, f"{str(i).zfill(width)}-{os.path.basename(f)}")
 
-    with contextlib.redirect_stdout(sys.stderr):
-        try:
-            aod.return_loan(session, book_id)
-        except (SystemExit, Exception):
-            pass
-
+    shutil.rmtree(work, ignore_errors=True)
     emit(event="done", id=args.job_id, filename=out_name)
 
 
@@ -173,7 +218,7 @@ def main():
         selftest()
         return
     p = argparse.ArgumentParser()
-    p.add_argument("--url", required=True)
+    p.add_argument("--url", action="append", help="Book URL (repeatable)")
     p.add_argument("--resolution", type=int, default=3)
     p.add_argument("--format", choices=["pdf", "jpg"], default="pdf")
     p.add_argument("--meta", action="store_true")

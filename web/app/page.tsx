@@ -7,18 +7,24 @@ export default function Home() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [pct, setPct] = useState<number | null>(null);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
-    setPhase("running"); setError(""); setPct(null); setStatus("Starting…");
+    const urls = String(f.get("urls") ?? "")
+      .split("\n")
+      .map((u) => u.trim())
+      .filter(Boolean);
+
+    setPhase("running"); setError(""); setWarnings([]); setPct(null); setStatus("Starting…");
 
     const res = await fetch("/api/download", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        url: f.get("url"),
+        urls,
         email: f.get("email"),
         password: f.get("password"),
         resolution: Number(f.get("resolution")),
@@ -51,14 +57,31 @@ export default function Home() {
     }
   }
 
+  // Overall progress across all books: completed books + fraction of current.
+  function overall(book: number, books: number, frac: number) {
+    return Math.round(((book - 1 + frac) / books) * 100);
+  }
+
   function handleEvent(ev: any) {
     switch (ev.event) {
-      case "login": setStatus("Logging in and borrowing the book…"); break;
-      case "info": setStatus(`“${ev.title}” — ${ev.pages} pages`); setPct(0); break;
-      case "page": setPct(Math.round((ev.done / ev.total) * 100)); setStatus(`Downloading pages ${ev.done}/${ev.total}`); break;
-      case "building": setPct(100); setStatus("Building the file…"); break;
+      case "login": setStatus("Logging in…"); break;
+      case "info":
+        setStatus(`Book ${ev.book}/${ev.books}: “${ev.title}” — ${ev.pages} pages`);
+        setPct(overall(ev.book, ev.books, 0));
+        break;
+      case "page":
+        setStatus(`Book ${ev.book}/${ev.books}: downloading pages ${ev.done}/${ev.total}`);
+        setPct(overall(ev.book, ev.books, ev.done / ev.total));
+        break;
+      case "building":
+        setStatus(`Book ${ev.book}/${ev.books}: building…`);
+        setPct(overall(ev.book, ev.books, 1));
+        break;
+      case "book-error":
+        setWarnings((w) => [...w, `Book ${ev.book}/${ev.books} skipped: ${ev.message}`]);
+        break;
       case "done":
-        setPhase("done"); setStatus(`Ready: ${ev.filename}`);
+        setPhase("done"); setStatus(`Ready: ${ev.filename}`); setPct(100);
         window.location.href = `/api/file/${ev.id}`;
         break;
       case "error": setPhase("error"); setError(ev.message); break;
@@ -70,8 +93,10 @@ export default function Home() {
     <main>
       <h1>Archive.org Downloader</h1>
       <form onSubmit={onSubmit}>
-        <label htmlFor="url">Book URL</label>
-        <input id="url" name="url" placeholder="https://archive.org/details/…" required />
+        <label htmlFor="urls">Book URLs (one per line)</label>
+        <textarea id="urls" name="urls" rows={4} required
+          placeholder={"https://archive.org/details/…\nhttps://archive.org/details/…"}
+          style={{ width: "100%", padding: "0.5rem", borderRadius: 6, border: "1px solid #333", background: "#1a1d24", color: "#e6e6e6", fontFamily: "inherit", resize: "vertical" }} />
 
         <div className="row">
           <div>
@@ -106,7 +131,11 @@ export default function Home() {
 
       {pct !== null && phase !== "error" && <progress value={pct} max={100} />}
       {status && <p className="status">{status}</p>}
+      {warnings.map((w, i) => <p key={i} className="error" style={{ color: "#fbbf24" }}>{w}</p>)}
       {error && <p className="error">{error}</p>}
+      <p className="status" style={{ marginTop: "1rem", fontSize: "0.8rem" }}>
+        Multiple URLs are bundled into a single <code>books.zip</code>.
+      </p>
     </main>
   );
 }

@@ -13,7 +13,9 @@ cd web
 npm install
 PYTHON_BIN=../.venv/bin/python npm run dev   # point PYTHON_BIN at a python that has the modules
 ```
-Open http://localhost:3000, paste a book URL and your archive.org credentials.
+Open http://localhost:3000, paste one or more book URLs (one per line) and your
+archive.org credentials. Multiple URLs are downloaded in one job and bundled
+into a single `books.zip`.
 
 `PYTHON_BIN` defaults to `python3` if unset. Credentials are sent to the local
 server per request, used only to run the download, and never stored.
