@@ -64,6 +64,10 @@ def run(args):
         emit(event="error", message="Invalid book URL")
         sys.exit(1)
 
+    # test seam: exercise the outer error handler without network (see selftest)
+    if os.environ.get("WORKER_CRASHTEST"):
+        raise RuntimeError("crashtest")
+
     aod = load_script()
     os.makedirs(args.out, exist_ok=True)
 
@@ -149,6 +153,18 @@ def selftest():
     )
     assert r.returncode == 1, r.returncode
     assert '"event": "error"' in r.stdout or '"event":"error"' in r.stdout, r.stdout
+
+    # an unexpected exception anywhere in run() must still emit ONE error event
+    # (not a bare traceback that leaves the UI hanging)
+    r2 = subprocess.run(
+        [sys.executable, os.path.abspath(__file__), "--url",
+         "https://archive.org/details/x", "--out", "/tmp/x", "--job-id", "0" * 32],
+        capture_output=True, text=True,
+        env={**os.environ, "ARCHIVE_EMAIL": "x@example.com",
+             "ARCHIVE_PASSWORD": "pw", "WORKER_CRASHTEST": "1"},
+    )
+    assert r2.returncode == 1, r2.returncode
+    assert '"event": "error"' in r2.stdout or '"event":"error"' in r2.stdout, r2.stdout
     print("selftest OK")
 
 
@@ -164,7 +180,18 @@ def main():
     p.add_argument("--print-disabled", dest="print_disabled", action="store_true")
     p.add_argument("--out", required=True)
     p.add_argument("--job-id", dest="job_id", required=True)
-    run(p.parse_args())
+    args = p.parse_args()
+    try:
+        run(args)
+    except SystemExit:
+        raise  # clean exits from run() already emitted their error event
+    except Exception as e:
+        # full detail to stderr (server logs), only the exception type to the
+        # client — avoids leaking internals over a public endpoint
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        emit(event="error", message=f"Download failed ({type(e).__name__}).")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
