@@ -23,9 +23,17 @@ server per request, used only to run the download, and never stored.
 ## Run (Docker)
 From the repo root:
 ```sh
+cp .env.example .env   # optional: set a default archive.org account
 docker compose up -d --build
 ```
 Serves on http://localhost:8788 (Python + modules baked into the image).
+
+### Default account
+Set `ARCHIVE_EMAIL` / `ARCHIVE_PASSWORD` in `.env` to configure a default
+archive.org account. Visitors can then leave the login fields blank; anyone
+entering their own credentials overrides the default for that request. Secrets
+are read at runtime and never baked into the image or committed (`.env` is
+git-ignored).
 
 ## Test
 ```sh

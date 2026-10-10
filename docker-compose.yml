@@ -4,3 +4,12 @@ services:
     ports:
       - "8788:3000"
     restart: unless-stopped
+    environment:
+      # Default archive.org account (optional). If set, visitors can leave the
+      # login fields blank. Set these in a .env file next to this compose file.
+      - ARCHIVE_EMAIL=${ARCHIVE_EMAIL:-}
+      - ARCHIVE_PASSWORD=${ARCHIVE_PASSWORD:-}
+      # Optional tunables
+      - MAX_CONCURRENT=${MAX_CONCURRENT:-2}
+      - WORKER_TIMEOUT_MS=${WORKER_TIMEOUT_MS:-1200000}
+      - JOB_TTL_MS=${JOB_TTL_MS:-3600000}

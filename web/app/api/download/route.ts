@@ -4,6 +4,7 @@ import { newJobId, jobDir, cleanup, sweepOld } from "@/lib/jobs";
 import { createLineBuffer } from "@/lib/sse";
 import { buildWorkerArgs } from "@/lib/worker";
 import { createGate } from "@/lib/gate";
+import { resolveCreds } from "@/lib/creds";
 
 export const runtime = "nodejs";
 
@@ -17,8 +18,7 @@ const gate = createGate(MAX_CONCURRENT);
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const urls = Array.isArray(body?.urls) ? body.urls : [];
-  const email = body?.email;
-  const password = body?.password;
+  const { email, password } = resolveCreds(body ?? {}, process.env);
   const resolution = Number(body?.resolution ?? 3);
   const format = body?.format === "jpg" ? "jpg" : "pdf";
   const meta = Boolean(body?.meta);
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   if (!urls.every((u: unknown) => typeof u === "string" && u.startsWith("https://archive.org/details/")))
     return new Response("Every URL must start with https://archive.org/details/", { status: 400 });
   if (!email || !password)
-    return new Response("Missing credentials", { status: 400 });
+    return new Response("No archive.org credentials: enter an account or configure a default on the server.", { status: 400 });
   if (!Number.isInteger(resolution) || resolution < 0 || resolution > 10)
     return new Response("Resolution must be an integer 0–10", { status: 400 });
 
