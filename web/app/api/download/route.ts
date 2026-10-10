@@ -4,7 +4,6 @@ import { newJobId, jobDir, cleanup, sweepOld } from "@/lib/jobs";
 import { createLineBuffer } from "@/lib/sse";
 import { buildWorkerArgs } from "@/lib/worker";
 import { createGate } from "@/lib/gate";
-import { resolveCreds } from "@/lib/creds";
 
 export const runtime = "nodejs";
 
@@ -18,18 +17,19 @@ const gate = createGate(MAX_CONCURRENT);
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const urls = Array.isArray(body?.urls) ? body.urls : [];
-  const { email, password } = resolveCreds(body ?? {}, process.env);
+  const email = process.env.ARCHIVE_EMAIL || "";
+  const password = process.env.ARCHIVE_PASSWORD || "";
   const resolution = Number(body?.resolution ?? 3);
   const format = body?.format === "jpg" ? "jpg" : "pdf";
   const meta = Boolean(body?.meta);
   const printDisabled = Boolean(body?.printDisabled);
 
+  if (!email || !password)
+    return new Response("Server has no archive.org account configured.", { status: 503 });
   if (urls.length === 0)
     return new Response("Provide at least one book URL", { status: 400 });
   if (!urls.every((u: unknown) => typeof u === "string" && u.startsWith("https://archive.org/details/")))
     return new Response("Every URL must start with https://archive.org/details/", { status: 400 });
-  if (!email || !password)
-    return new Response("No archive.org credentials: enter an account or configure a default on the server.", { status: 400 });
   if (!Number.isInteger(resolution) || resolution < 0 || resolution > 10)
     return new Response("Resolution must be an integer 0–10", { status: 400 });
 
